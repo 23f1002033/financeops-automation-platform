@@ -125,8 +125,10 @@ def compute_snapshot(start: dt.date | None = None, end: dt.date | None = None) -
         retention_pct=retention, order_growth_pct=order_growth,
     )
 
+
 def revenue_trend(freq: str = "D") -> pd.DataFrame:
     """Revenue/orders/margin time series. freq in {'D','W','M'}."""
+    freq = {"D": "D", "W": "W", "M": "ME"}.get(freq, freq)
     orders = load_orders()
     if orders.empty:
         return pd.DataFrame(columns=["period", "revenue", "orders", "gross_margin_pct"])
@@ -147,8 +149,8 @@ def revenue_trend(freq: str = "D") -> pd.DataFrame:
     return g.drop(columns="cost")
 
 
-def region_performance() -> pd.DataFrame:
-    orders = load_orders()
+def region_performance(start: dt.date | None = None, end: dt.date | None = None) -> pd.DataFrame:
+    orders = _filter_period(load_orders(), "order_date", start, end)
     if orders.empty:
         return pd.DataFrame(columns=["zone", "revenue", "orders", "gross_margin_pct"])
     g = (
@@ -161,8 +163,8 @@ def region_performance() -> pd.DataFrame:
     return g.drop(columns="cost").sort_values("revenue", ascending=False)
 
 
-def category_performance() -> pd.DataFrame:
-    orders = load_orders()
+def category_performance(start: dt.date | None = None, end: dt.date | None = None) -> pd.DataFrame:
+    orders = _filter_period(load_orders(), "order_date", start, end)
     if orders.empty:
         return pd.DataFrame(columns=["category", "revenue", "orders"])
     g = (
@@ -172,4 +174,30 @@ def category_performance() -> pd.DataFrame:
         .sort_values("revenue", ascending=False)
     )
     g["revenue"] = g["revenue"].round(2)
+    return g
+
+
+def daily_series(days: int = 30) -> pd.DataFrame:
+    """Compact daily series for sparklines: revenue, orders, refunds per day."""
+    orders = load_orders()
+    returns = load_returns()
+    if orders.empty:
+        return pd.DataFrame(columns=["date", "revenue", "orders", "refunds"])
+
+    end = orders["order_date"].max()
+    start = end - pd.Timedelta(days=days)
+    o = orders[orders["order_date"] >= start]
+
+    g = (o.set_index("order_date").groupby(pd.Grouper(freq="D"))
+         .agg(revenue=("net_revenue", "sum"), orders=("order_id", "nunique"))
+         .reset_index().rename(columns={"order_date": "date"}))
+
+    if not returns.empty:
+        r = returns[returns["return_date"] >= start]
+        rr = (r.set_index("return_date").groupby(pd.Grouper(freq="D"))["refund_amount"]
+              .sum().reset_index().rename(columns={"return_date": "date", "refund_amount": "refunds"}))
+        g = g.merge(rr, on="date", how="left")
+    if "refunds" not in g.columns:
+        g["refunds"] = 0
+    g = g.fillna(0)
     return g
