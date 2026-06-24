@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: financeops
+      POSTGRES_PASSWORD: financeops
+      POSTGRES_DB: financeops
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financeops"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg2://financeops:financeops@db:5432/financeops
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: uvicorn financeops.api.main:app --host 0.0.0.0 --port 8000
+
+  dashboard:
+    build: .
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg2://financeops:financeops@db:5432/financeops
+    ports:
+      - "8501:8501"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+
+  scheduler:
+    build: .
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg2://financeops:financeops@db:5432/financeops
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: python -c "from financeops.automation.scheduler import start_scheduler; start_scheduler(hour=6, minute=0)"
+
+volumes:
+  pgdata:
