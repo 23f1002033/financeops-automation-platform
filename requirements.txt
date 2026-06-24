@@ -1,0 +1,29 @@
+# Core
+pandas
+numpy
+SQLAlchemy
+psycopg2-binary
+pydantic
+pydantic-settings
+
+# API
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Dashboard
+streamlit
+plotly
+
+# Reporting
+reportlab
+matplotlib
+openpyxl
+
+# Automation
+APScheduler
+
+# Dev / test
+pytest
+httpx
+EOF
